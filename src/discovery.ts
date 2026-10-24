@@ -15,6 +15,11 @@ const CACHE_DIR = path.join(
 )
 const CACHE_FILE = path.join(CACHE_DIR, "models-dev.json")
 const CACHE_TTL = 6 * 60 * 60 * 1000 // 6 hours
+// Output cap used when a source reports an output limit as large as the whole
+// context window (models.dev does this for some open-weight models). OpenCode
+// then requests context minus its own prompt estimate as max_tokens, and
+// servers like vLLM reject it when their token count is even 1 higher.
+const FALLBACK_OUTPUT_LIMIT = 32_768
 
 
 // ── models.dev types (subset matching OpenCode's schema) ──
@@ -301,6 +306,11 @@ function endpointMaxOutput(item: EndpointModelResponse): number | undefined {
   return typeof v === "number" ? v : undefined
 }
 
+export function capOutputLimit(context: number, output: number): number {
+  if (output < context) return output
+  return Math.min(FALLBACK_OUTPUT_LIMIT, Math.floor(context / 2))
+}
+
 export type DisplayStyle = "name" | "slug"
 
 export async function discoverAndEnrich(
@@ -326,12 +336,13 @@ export async function discoverAndEnrich(
       ? id
       : (item.name && item.name !== item.id ? item.name : undefined) ?? meta?.name ?? id
 
+    const context = epContext ?? meta?.limit.context ?? 128_000
     const model: EnrichedModel = {
       name: displayName,
       limit: {
-        context: epContext ?? meta?.limit.context ?? 128_000,
+        context,
         input: meta?.limit.input,
-        output: epOutput ?? meta?.limit.output ?? 4096,
+        output: capOutputLimit(context, epOutput ?? meta?.limit.output ?? 4096),
       },
       modalities: meta?.modalities ?? { input: ["text"], output: ["text"] },
     }
