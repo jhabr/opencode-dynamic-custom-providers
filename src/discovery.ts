@@ -16,9 +16,11 @@ const CACHE_DIR = path.join(
 const CACHE_FILE = path.join(CACHE_DIR, "models-dev.json")
 const CACHE_TTL = 6 * 60 * 60 * 1000 // 6 hours
 // Output cap used when a source reports an output limit as large as the whole
-// context window (models.dev does this for some open-weight models). OpenCode
-// then requests context minus its own prompt estimate as max_tokens, and
-// servers like vLLM reject it when their token count is even 1 higher.
+// context window, or close to it (models.dev does this for some open-weight
+// models, e.g. 235929 of 262144). OpenCode then requests context minus its own
+// prompt estimate as max_tokens, which servers like vLLM reject when their
+// token count is even 1 higher, and it reserves the output limit from the
+// context, so compaction kicks in after a few thousand tokens.
 const FALLBACK_OUTPUT_LIMIT = 32_768
 
 
@@ -307,7 +309,7 @@ function endpointMaxOutput(item: EndpointModelResponse): number | undefined {
 }
 
 export function capOutputLimit(context: number, output: number): number {
-  if (output < context) return output
+  if (output <= context / 2) return output
   return Math.min(FALLBACK_OUTPUT_LIMIT, Math.floor(context / 2))
 }
 

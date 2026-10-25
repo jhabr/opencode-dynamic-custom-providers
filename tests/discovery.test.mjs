@@ -23,3 +23,8 @@ test("capOutputLimit caps output limits that fill the whole context window", () 
   assert.strictEqual(capOutputLimit(16_384, 16_384), 8_192)
   assert.strictEqual(capOutputLimit(8_192, 100_000), 4_096)
 })
+
+test("capOutputLimit caps output limits that fill most of the context window", () => {
+  assert.strictEqual(capOutputLimit(262_144, 235_929), 32_768)
+  assert.strictEqual(capOutputLimit(16_384, 12_000), 8_192)
+})
