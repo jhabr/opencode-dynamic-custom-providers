@@ -54,6 +54,10 @@ Any provider with an OpenAI-compatible package, a `settings.baseURL` and **no ex
 }
 ```
 
+Output limits an endpoint reports above half the context window (some report `max_tokens` equal
+to the context) are capped at `min(32768, context / 2)`, so a request always leaves room for the
+prompt.
+
 Eligibility rules (evaluated after every provider transform, including OpenCode's own config):
 
 - `settings.baseURL` is a valid `http(s)` URL;
@@ -112,6 +116,11 @@ OAuth connections are rejected for discovery (the provider then shows no discove
 rather than falling back to a different credential. For every managed provider the plugin
 registers a key method and (unless your config already defines `env`) an env method for
 `OPENCODE_LOCAL_<ID>_API_KEY`.
+
+The provider's `headers` are sent on the discovery request too, so gateways that authenticate
+with a custom header (e.g. a 3scale `user_key`) list their models. An explicit `Authorization`
+header wins over the key. Values of credential-like headers (names containing `auth`, `key`,
+`token`, `secret`, `cookie`, `password` or `session`) are treated as secrets for redaction.
 
 Discovered models are bound to the connection that produced them. When OpenCode reports a
 credential change (`credential.updated`/`credential.switched`), or a refresh resolves a different

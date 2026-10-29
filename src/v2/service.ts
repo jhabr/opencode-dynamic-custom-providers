@@ -7,7 +7,7 @@ import { applyNativeModel, toNativeModels, type NativeModel } from "./model.js"
 import type { PluginOptions } from "./options.js"
 import { ConfigError, persistProvider, readProviders } from "./persist.js"
 import type { AddProviderResult, ProviderStatus, RefreshResult } from "./rpc.js"
-import { CancelledError, SafeError, checkBaseURL, displayURL, fingerprint, isHttpUrl, safeMessage, urlSecrets } from "./secure.js"
+import { CancelledError, SafeError, checkBaseURL, displayURL, fingerprint, headerSecrets, isHttpUrl, safeMessage, urlSecrets } from "./secure.js"
 
 export type { AddProviderResult, ProviderStatus, RefreshResult } from "./rpc.js"
 
@@ -72,6 +72,8 @@ interface CredentialTarget {
 
 interface Candidate extends CredentialTarget {
   readonly baseURL: string
+  /** The provider's configured request headers, also sent on discovery. */
+  readonly headers?: Readonly<Record<string, string>>
   readonly displayStyle: DisplayStyle
   /** Source identity: normalized base URL, runtime package and integration. */
   readonly source: string
@@ -223,6 +225,7 @@ export function createService(host: Host, options: PluginOptions) {
       const baseURL = stringSetting(record.provider.settings, "baseURL")
       const integrationID = (record.provider.integrationID as string | undefined) ?? id
       const settingsKey = stringSetting(record.provider.settings, "apiKey")
+      const headers = record.provider.headers
       const pkg = record.provider.package
       known.set(id, {
         id,
@@ -245,6 +248,7 @@ export function createService(host: Host, options: PluginOptions) {
         baseURL,
         integrationID,
         ...(settingsKey ? { settingsKey } : {}),
+        ...(headers ? { headers } : {}),
         displayStyle: opt?.displayStyle ?? options.displayStyle,
         source: sourceOf(baseURL, record.provider.package, integrationID),
       })
@@ -631,7 +635,7 @@ export function createService(host: Host, options: PluginOptions) {
   }
 
   async function discoverCandidate(candidate: Candidate, signal: AbortSignal): Promise<Outcome> {
-    const secrets = [candidate.settingsKey, ...urlSecrets(candidate.baseURL)]
+    const secrets = [candidate.settingsKey, ...urlSecrets(candidate.baseURL), ...headerSecrets(candidate.headers)]
     let identity: string | undefined
     try {
       const credential = await executionCredential(candidate)
@@ -641,6 +645,7 @@ export function createService(host: Host, options: PluginOptions) {
       const models = toNativeModels(
         await discoverAndEnrich(candidate.baseURL, {
           ...(credential.key ? { apiKey: credential.key } : {}),
+          ...(candidate.headers ? { headers: candidate.headers } : {}),
           signal,
           displayStyle: candidate.displayStyle,
           secrets: secrets.filter((value): value is string => !!value),

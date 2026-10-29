@@ -56,6 +56,8 @@ interface EndpointModel {
 
 export interface DiscoverOptions {
   readonly apiKey?: string
+  /** Provider `headers`, sent on discovery too (e.g. a gateway key); an explicit `Authorization` wins over `apiKey`. */
+  readonly headers?: Readonly<Record<string, string>>
   readonly signal?: AbortSignal
   readonly displayStyle?: DisplayStyle
   /** Secrets that must never appear in returned model IDs/names (e.g. the key, URL query values). */
@@ -70,6 +72,7 @@ function cacheFile(): string {
 }
 const CACHE_TTL = 6 * 60 * 60 * 1000
 const ENDPOINT_TIMEOUT = 15_000
+const FALLBACK_OUTPUT_LIMIT = 32_768
 const CATALOG_TIMEOUT = 10_000
 const MAX_REDIRECTS = 3
 const MAX_BODY = 8 * 1024 * 1024
@@ -218,6 +221,7 @@ export async function fetchEndpointModels(baseURL: string, options: DiscoverOpti
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
   const headers: Record<string, string> = { Accept: "application/json" }
   if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
+  Object.assign(headers, options.headers)
 
   let target = start
   let res: Response | undefined
@@ -292,6 +296,15 @@ function num(value: unknown): number | undefined {
 }
 
 /**
+ * Some endpoints report an output limit equal to (or most of) the context window, which
+ * leaves no room for the prompt. Above half the context, fall back to a sane limit.
+ */
+export function capOutputLimit(context: number, output: number): number {
+  if (output <= context / 2) return output
+  return Math.min(FALLBACK_OUTPUT_LIMIT, Math.floor(context / 2))
+}
+
+/**
  * Discovers and enriches models. Model IDs/names that echo a known secret are
  * dropped so a hostile endpoint cannot reflect a credential into the model list.
  */
@@ -307,13 +320,14 @@ export async function discoverAndEnrich(baseURL: string, options: DiscoverOption
     if (secrets.length > 0 && (containsSecret(item.id, secrets) || containsSecret(id, secrets))) continue
     const meta = table.get(normalizeModelId(id))
     const caps = capabilities(item)
+    const context = num(item.context_window ?? item.max_model_len ?? item.context_length) ?? meta?.limit?.context ?? 128_000
     const remoteName = typeof item.name === "string" && item.name !== item.id && !containsSecret(item.name, secrets) ? item.name : undefined
     const model: EnrichedModel = {
       name: options.displayStyle === "name" ? remoteName ?? meta?.name ?? id : id,
       limit: {
-        context: num(item.context_window ?? item.max_model_len ?? item.context_length) ?? meta?.limit?.context ?? 128_000,
+        context,
         input: meta?.limit?.input,
-        output: num(item.max_completion_tokens ?? item.max_output_tokens) ?? meta?.limit?.output ?? 4096,
+        output: capOutputLimit(context, num(item.max_completion_tokens ?? item.max_output_tokens) ?? meta?.limit?.output ?? 4096),
       },
       modalities: meta?.modalities ?? { input: ["text"], output: ["text"] },
     }

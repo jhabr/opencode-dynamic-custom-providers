@@ -102,6 +102,18 @@ test("startup discovers eligible config providers once and produces schema-valid
   assert.equal(fixture.state.seenAuth.length, before)
 })
 
+test("startup discovery sends the provider's configured headers and keeps models matching non-credential header values", async () => {
+  const { host } = await boot({
+    configProviders: {
+      proxy: { name: "Proxy", settings: { baseURL: fixture.baseURL }, headers: { user_key: "gateway-key-0001", "X-Org": "fixture" } },
+    },
+  })
+  assert.deepEqual(models(host, "proxy"), ["fixture-a", "vendor/gpt-4o"])
+  const [seen] = fixture.state.seenHeaders
+  assert.equal(seen.user_key, "gateway-key-0001")
+  assert.equal(seen["x-org"], "fixture")
+})
+
 test("skips explicit-model, native-discovery, incompatible-package and opted-out providers", async () => {
   const { host } = await boot(
     {

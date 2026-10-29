@@ -46,6 +46,7 @@ export async function startFixture(initial = { models: ["fixture-a"] }) {
   const server = http.createServer((req, res) => {
     state.seenAuth.push(req.headers.authorization ?? null)
     state.seenPaths = [...(state.seenPaths ?? []), req.url]
+    state.seenHeaders = [...(state.seenHeaders ?? []), req.headers]
     if (state.hold) {
       // Holds the response until the test releases it (in-flight cancellation tests).
       state.held = [...(state.held ?? []), () => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ data: state.models.map((id) => ({ id })) })) }]
@@ -219,6 +220,7 @@ export function createHost({ directory, configProviders: staticConfig = {}, cred
         if (item.name !== undefined) provider.name = item.name
         if (item.package !== undefined) provider.package = item.package
         if (item.settings !== undefined) provider.settings = { ...provider.settings, ...item.settings }
+        if (item.headers !== undefined) provider.headers = item.headers
       })
       for (const modelID of Object.keys(item.models ?? {})) {
         if (!editor.get(id)?.models.has(modelID)) editor.models.update(id, modelID, () => undefined)

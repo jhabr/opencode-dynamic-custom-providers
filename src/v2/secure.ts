@@ -75,6 +75,15 @@ export function urlSecrets(raw: string): string[] {
   }
 }
 
+const CREDENTIAL_HEADER = /auth|key|token|secret|cookie|password|session/i
+
+/** Values of credential-like headers (e.g. a gateway `user_key`); other header values are not secrets. */
+export function headerSecrets(headers: Readonly<Record<string, string>> | undefined): string[] {
+  return Object.entries(headers ?? {})
+    .filter(([name]) => CREDENTIAL_HEADER.test(name))
+    .map(([, value]) => value)
+}
+
 /** Stable, non-reversible fingerprint used only in memory to bind inventory to a credential. */
 export function fingerprint(secret: string | undefined): string {
   if (!secret) return "none"

@@ -5,6 +5,14 @@ All notable changes to `opencode-dynamic-custom-providers-v2` are documented her
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Discovery sends the provider's configured `headers` (e.g. a gateway `user_key`); an explicit `Authorization` header wins over the key. Credential-like header values are redacted from diagnostics.
+
+### Fixed
+- Output limits above half the context window are capped at `min(32768, context / 2)`, so requests leave room for the prompt.
+
 ## [1.0.0] - 2026-10-12
 
 ### Added
