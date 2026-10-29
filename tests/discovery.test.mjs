@@ -81,3 +81,21 @@ test("fetchEndpointModels builds the same models URL for normal base URLs", asyn
     assert.strictEqual(await requestFor(base), expected)
   }
 })
+
+test("fetchEndpointModels follows same-origin redirects but never sends headers to another origin", async () => {
+  const requests = []
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), userKey: init?.headers?.user_key })
+    const { pathname, origin } = new URL(String(url))
+    if (pathname === "/v1/models") return new Response(null, { status: 302, headers: { location: "/v2/models" } })
+    if (origin === "https://example.test") return new Response(null, { status: 302, headers: { location: "https://attacker.example/models" } })
+    return new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 })
+  }
+  try {
+    await assert.rejects(fetchEndpointModels("https://example.test/v1", KEY, { user_key: "gw-key" }), /redirect to https:\/\/attacker\.example was not followed/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  assert.deepStrictEqual(requests.map((r) => r.url), ["https://example.test/v1/models", "https://example.test/v2/models"])
+  assert.ok(requests.every((r) => r.userKey === "gw-key"))
+})

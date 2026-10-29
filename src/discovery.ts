@@ -22,6 +22,7 @@ const CACHE_TTL = 6 * 60 * 60 * 1000 // 6 hours
 // token count is even 1 higher, and it reserves the output limit from the
 // context, so compaction kicks in after a few thousand tokens.
 const FALLBACK_OUTPUT_LIMIT = 32_768
+const MAX_REDIRECTS = 3
 
 
 // ── models.dev types (subset matching OpenCode's schema) ──
@@ -228,10 +229,20 @@ export async function fetchEndpointModels(
     ...(extraHeaders ?? {}),
   }
 
-  const res = await fetch(modelsUrl.toString(), {
-    headers,
-    signal: AbortSignal.timeout(15_000),
-  })
+  // Follow redirects by hand: custom headers (unlike Authorization) would otherwise be
+  // forwarded to whatever origin the endpoint redirects to.
+  const signal = AbortSignal.timeout(15_000)
+  let target = modelsUrl
+  let res = await fetch(target, { headers, signal, redirect: "manual" })
+  for (let hop = 0; res.status >= 300 && res.status < 400 && res.status !== 304; hop++) {
+    const location = res.headers.get("location")
+    const next = location ? new URL(location, target) : undefined
+    if (!next || next.origin !== modelsUrl.origin || hop >= MAX_REDIRECTS) {
+      throw new Error(`HTTP ${res.status}: redirect to ${next?.origin ?? "an unknown location"} was not followed`)
+    }
+    target = next
+    res = await fetch(target, { headers, signal, redirect: "manual" })
+  }
 
   if (!res.ok) {
     let detail = res.statusText
