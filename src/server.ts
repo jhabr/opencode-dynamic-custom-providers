@@ -3,6 +3,7 @@ import { tool } from "@opencode-ai/plugin"
 import { discoverAndEnrich } from "./discovery.js"
 import { sanitizeErrorMessage, sanitizeUrl } from "./security.js"
 import { reloadAllProviders, addProvider, validateAddProviderParams, persistProviderApiKey } from "./commands.js"
+import { persistProvidersToLocalConfig } from "./persist.js"
 import { shouldDiscover, getApiKey, getHeaders, type ProviderConfig, type OpenCodeConfig } from "./types.js"
 
 export const id = "opencode-dynamic-custom-providers"
@@ -54,7 +55,7 @@ export const server: Plugin = async ({ client }) => {
             continue
           }
 
-          providerConfig.models = { ...(providerConfig.models as Record<string, unknown> ?? {}), ...models }
+          providerConfig.models = models
           providerConfig.npm = providerConfig.npm ?? "@ai-sdk/openai-compatible"
           providerConfig.api = providerConfig.api ?? baseURL
 
@@ -95,9 +96,7 @@ export const server: Plugin = async ({ client }) => {
           }
 
           if (result.totalModels > 0) {
-            await client.config.update({
-              body: { provider: providers } as never,
-            })
+            await persistProvidersToLocalConfig(client, providers, result.updatedProviderIds)
           }
 
           const lines: string[] = []
@@ -163,9 +162,7 @@ export const server: Plugin = async ({ client }) => {
           )
 
           providers[args.providerId] = result.providerEntry
-          await client.config.update({
-            body: { provider: providers } as never,
-          })
+          await persistProvidersToLocalConfig(client, providers, [args.providerId])
 
           return result.message
         },
