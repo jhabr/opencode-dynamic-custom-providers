@@ -34,6 +34,13 @@ Project or global `opencode.json(c)`:
 }
 ```
 
+To install the fork with provider `headers` on discovery and the output limit cap, use its
+prebuilt `v2` branch:
+
+```bash
+opencode plugin add github:jhabr/opencode-dynamic-custom-providers#v2
+```
+
 OpenCode installs the package itself (production dependencies only, install scripts disabled).
 The only runtime dependency is `jsonc-parser`.
 

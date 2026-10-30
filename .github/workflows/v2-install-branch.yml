@@ -1,0 +1,72 @@
+# Keeps the `v2` branch as a prebuilt, installable copy of the V2 package, so the fork can be
+# installed straight from GitHub:
+#   opencode plugin add github:jhabr/opencode-dynamic-custom-providers#v2
+# OpenCode installs Git plugins without lifecycle scripts, so the branch carries the built dist/
+# at its root and a manifest without build scripts or devDependencies. Runs only after CI passed
+# on main; every build is a new commit, so installs pinned to an older commit keep working.
+name: V2 install branch
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v2-install-branch
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24.21.0" # Node 24 LTS; bundles npm 11.19.0
+
+jobs:
+  build:
+    name: Build and push the v2 branch
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Build (frozen packages/v2 lockfile, no lifecycle scripts)
+        working-directory: packages/v2
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Assemble the branch contents
+        env:
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          out="$RUNNER_TEMP/v2"
+          if git fetch --quiet origin v2; then
+            git worktree add --quiet "$out" FETCH_HEAD
+          else
+            git worktree add --quiet --orphan -b v2 "$out"
+          fi
+          git -C "$out" rm -rq --ignore-unmatch .
+          cp -R packages/v2/dist packages/v2/README.md packages/v2/CHANGELOG.md packages/v2/LICENSE "$out/"
+          node -e '
+            const fs = require("node:fs")
+            const manifest = JSON.parse(fs.readFileSync("packages/v2/package.json", "utf8"))
+            delete manifest.scripts
+            delete manifest.devDependencies
+            fs.writeFileSync(process.argv[1], JSON.stringify(manifest, null, 2) + "\n")
+          ' "$out/package.json"
+          cd "$out"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "v2 branch already matches ${SOURCE_SHA}"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "build: V2 install branch from ${SOURCE_SHA}"
+          git push --quiet origin HEAD:refs/heads/v2

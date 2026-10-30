@@ -74,6 +74,16 @@ or add it to the `plugins` array of `opencode.json(c)`:
 }
 ```
 
+#### Alternative: Install this fork from GitHub
+
+The `v2` branch of [jhabr/opencode-dynamic-custom-providers](https://github.com/jhabr/opencode-dynamic-custom-providers)
+is a prebuilt copy of the V2 package, rebuilt from `main` after CI passes. It adds provider
+`headers` on discovery and the output limit cap on top of the npm release:
+
+```bash
+opencode plugin add github:jhabr/opencode-dynamic-custom-providers#v2
+```
+
 #### Alternative: Local Clone (for Development)
 
 ```bash
